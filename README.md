@@ -31,4 +31,3 @@ Supported Annotations
 * @XmlElement
 * @XmlTransient
 * @XmlValue
- Adding more support soon
