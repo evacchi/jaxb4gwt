@@ -10,6 +10,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashSet;
+import java.util.List;
 
 import javax.xml.bind.annotation.XmlAttribute;
 import javax.xml.bind.annotation.XmlElement;
@@ -23,9 +24,10 @@ import com.google.gwt.core.ext.GeneratorContext;
 import com.google.gwt.core.ext.TreeLogger;
 import com.google.gwt.core.ext.UnableToCompleteException;
 import com.google.gwt.core.ext.typeinfo.JClassType;
+import com.google.gwt.core.ext.typeinfo.JField;
+import com.google.gwt.core.ext.typeinfo.JType;
 import com.google.gwt.user.rebind.ClassSourceFileComposerFactory;
 import com.google.gwt.user.rebind.SourceWriter;
-import com.peterfranza.gwt.jaxb.client.parser.JAXBBindings;
 
 public class JAXBParserGenerator extends Generator {
 
@@ -33,38 +35,54 @@ public class JAXBParserGenerator extends Generator {
 
     @Override
     public String generate(TreeLogger logger, GeneratorContext context, String typeName) throws UnableToCompleteException {
-
         try {
+            logger.log(TreeLogger.INFO, "Start JAXBParserGenerator for " + typeName);
             JClassType classType = context.getTypeOracle().getType(typeName);
+            logger.log(TreeLogger.INFO, "Found JClassType " + classType);
+            JClassType firstInterfaceClassType = classType.getImplementedInterfaces()[0];
+            logger.log(TreeLogger.INFO, "Found JClassType firstImplInterface " + firstInterfaceClassType);
+            JClassType rootClassType = firstInterfaceClassType.isParameterized().getTypeArgs()[0];
+            logger.log(TreeLogger.INFO, "Found JClassType first TypeArgs as rootType " + rootClassType);
 
-            JAXBBindings bindings = classType.getAnnotation(JAXBBindings.class);
-            if (bindings == null) {
-                throw new RuntimeException("No JAXBBindings defined for " + classType.getName());
+            XmlRootElement rootElement = rootClassType.getAnnotation(XmlRootElement.class);
+            if (rootClassType == null || rootElement == null) {
+                throw new RuntimeException("No parameterized generic provided as @XmlRootElement for " + classType.getName());
             }
 
-            createFactoryForClass(logger, context, bindings.value(), bindings);
-            for (Class<?> cls : bindings.objects()) {
+            Class<?> rootClass = Class.forName(rootClassType.getErasedType().getQualifiedBinaryName());
+            List<Class<?>> objects = new ArrayList<Class<?>>();
+            JField[] fields = rootClassType.getFields();
+            for (JField jField : fields) {
+                XmlElement annotation = jField.getAnnotation(XmlElement.class);
+                if (annotation != null) {
+                    JType type = jField.getType();
+                    objects.add(Class.forName(type.getErasedType().getQualifiedBinaryName()));
+                }
+            }
+
+            createFactoryForClass(logger, context, rootClass, objects);
+            for (Class<?> cls : objects) {
                 if (!Modifier.isAbstract(cls.getModifiers())) {
-                    createFactoryForClass(logger, context, cls, bindings);
+                    createFactoryForClass(logger, context, cls, objects);
                 }
             }
 
             String rootType = "?";
-            rootType = bindings.value().getName();
+            rootType = rootClass.getName();
 
             // Here you would retrieve the metadata based on typeName for this Screen
             SourceWriter src = getSourceWriter(classType, context, logger);
             if (src != null) {
                 System.out.println("Generating for: " + typeName);
-                System.out.println("  -- " + bindings.value().getName());
+                System.out.println("  -- " + rootClass.getName());
 
                 src.println("public JAXBParser<" + rootType + "> create() {");
                 src.println("System.out.println(\"Creating Parser For: " + rootType + "\");");
 
-                String clsName = bindings.value().getSimpleName();
+                String clsName = rootClass.getSimpleName();
                 clsName = ("" + clsName.charAt(0)).toLowerCase() + clsName.substring(1);
 
-                XmlRootElement rootElement = bindings.value().getAnnotation(XmlRootElement.class);
+                // XmlRootElement rootElement = rootClass.getAnnotation(XmlRootElement.class);
                 if (rootElement != null) {
                     if (!rootElement.name().equals("##default")) {
                         clsName = rootElement.name();
@@ -80,7 +98,7 @@ public class JAXBParserGenerator extends Generator {
                 src.println("		if(!element.getNodeName().equals(\"" + clsName + "\"))");
                 src.println("			throw new RuntimeException(\"Bad Element Found: \" + element.getNodeName() );");
 
-                src.println("		return " + bindings.value().getName() + "FactoryGenerated.create(element);");
+                src.println("		return " + rootClass.getName() + "FactoryGenerated.create(element);");
                 src.println("	}");
                 src.println("};");
 
@@ -89,7 +107,7 @@ public class JAXBParserGenerator extends Generator {
                 src.commit(logger);
             }
 
-            return typeName + "Generated";
+            return classType.getPackage().getName() + "." + classType.getSimpleSourceName() + "Generated";
 
         }
         catch (Exception e) {
@@ -99,7 +117,7 @@ public class JAXBParserGenerator extends Generator {
     }
 
     private void createFactoryForClass(TreeLogger logger,
-            GeneratorContext context, Class<?> cls, final JAXBBindings bindings) throws Exception {
+            GeneratorContext context, Class<?> cls, final List<Class<?>> bindings) throws Exception {
 
         SourceWriter factorySrc = getFactorySourceWriter(cls, context, logger, getImports(cls));
         if (factorySrc != null) {
@@ -242,7 +260,7 @@ public class JAXBParserGenerator extends Generator {
         return list;
     }
 
-    private static String getElementAccessor(Field f, String elemName, final JAXBBindings bindings) {
+    private static String getElementAccessor(Field f, String elemName, final List<Class<?>> bindings) {
 
         if (f.getType().equals(String.class)) {
             return "XMLParsingUtils.getNodeText(XMLParsingUtils.getNamedChild(element, \"" + elemName + "\"))";
@@ -297,7 +315,7 @@ public class JAXBParserGenerator extends Generator {
                             + typeClass.getName().replace('$', '.') + ">(){\n")
                         .append("\t\t").append("public " + typeClass.getName().replace('$', '.') + " build(Element e){\n");
 
-                    for (Class<?> cls : bindings.objects()) {
+                    for (Class<?> cls : bindings) {
 
                         if (listType instanceof Class && ((Class<?>) listType).isAssignableFrom(cls)
                             && !Modifier.isAbstract(cls.getModifiers())) {
@@ -335,7 +353,7 @@ public class JAXBParserGenerator extends Generator {
         }
 
         if (bindings != null) {
-            for (Class<?> b : bindings.objects()) {
+            for (Class<?> b : bindings) {
                 if (!Modifier.isAbstract(b.getModifiers()) && f.getType().equals(b)) {
                     return b.getSimpleName() + "FactoryGenerated.create(XMLParsingUtils.getNamedChild(element, \"" + elemName
                         + "\"))";
@@ -348,7 +366,7 @@ public class JAXBParserGenerator extends Generator {
                     + f.getType().getName().replace('$', '.') + ">(){\n")
                 .append("\t\t").append("public " + f.getType().getName().replace('$', '.') + " build(Element e){\n");
 
-            for (Class<?> cls : bindings.objects()) {
+            for (Class<?> cls : bindings) {
                 if (f.getType().isAssignableFrom(cls) && !Modifier.isAbstract(cls.getModifiers())) {
 
                     String typeName = cls.getSimpleName();
