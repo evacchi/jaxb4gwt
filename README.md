@@ -1,4 +1,4 @@
-gwtjaxb
+jaxb4gwt
 =======
 
 A GWT library that supports basic JAXB annotations to bind xml to a bean hierarchy.
@@ -14,7 +14,7 @@ public interface RootBeanParserFactory extends JAXBParserFactory<RootBean>{}
 You create an interface that extends JAXBParserFactory<> with a generic that matches the @XMLRootEntity node.
 
 
-Then you add a @JAXBBindings to the interface where value is the @XmlRootEntity and objects is an array of all other beans that the parser should use.
+Then you optionally add a @JAXBBindings to the interface where value is the @XmlRootEntity and objects is an array of all other beans that the parser should use.
 
 Using the jaxb parser is easy:
 ```
