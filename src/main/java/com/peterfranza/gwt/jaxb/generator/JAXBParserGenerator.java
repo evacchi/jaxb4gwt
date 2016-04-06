@@ -10,7 +10,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashSet;
-import java.util.List;
 
 import javax.xml.bind.annotation.XmlAttribute;
 import javax.xml.bind.annotation.XmlElement;
@@ -39,7 +38,7 @@ public class JAXBParserGenerator extends Generator {
         try {
             logger.log(TreeLogger.INFO, "Start JAXBParserGenerator for " + typeName);
             JClassType classType = context.getTypeOracle().getType(typeName);
-            List<Class<?>> objects = new ArrayList<Class<?>>();
+            Collection<Class<?>> objects = new HashSet<Class<?>>();
             JAXBBindings bindings = classType.getAnnotation(JAXBBindings.class);
             if (bindings != null)
                 objects.addAll(Arrays.asList(bindings.objects()));
@@ -121,15 +120,16 @@ public class JAXBParserGenerator extends Generator {
     }
 
     private void createFactoryForClass(TreeLogger logger,
-            GeneratorContext context, Class<?> cls, final List<Class<?>> bindings) throws Exception {
+            GeneratorContext context, Class<?> cls, final Collection<Class<?>> bindings) throws Exception {
 
         SourceWriter factorySrc = getFactorySourceWriter(cls, context, logger, getImports(cls));
         if (factorySrc != null) {
-            factorySrc.println("public static " + cls.getName().replace('$', '.') + " create(Element element) {");
+            String clazzName = cls.getName().replace('$', '.');
+            factorySrc.println("public static " + clazzName + " create(Element element) {");
 
             factorySrc.println("		if(element == null) return null;");
             factorySrc.println("");
-            factorySrc.println(cls.getName().replace('$', '.') + " _instance = new " + cls.getName().replace('$', '.') + "();");
+            factorySrc.println(clazzName + " _instance = new " + clazzName + "();");
 
             for (Field f : getDeclaredFields(cls)) {
 
@@ -264,7 +264,7 @@ public class JAXBParserGenerator extends Generator {
         return list;
     }
 
-    private static String getElementAccessor(Field f, String elemName, final List<Class<?>> bindings) {
+    private static String getElementAccessor(Field f, String elemName, final Collection<Class<?>> bindings) {
 
         if (f.getType().equals(String.class)) {
             return "XMLParsingUtils.getNodeText(XMLParsingUtils.getNamedChild(element, \"" + elemName + "\"))";
@@ -301,7 +301,8 @@ public class JAXBParserGenerator extends Generator {
         }
         else if (f.getType().equals(Enum.class) || ((f.getType() instanceof Class<?>) && ((Class<?>) f.getType()).isEnum())) {
             Class<?> enumClass = ((Class<?>) f.getType());
-            return "XMLParsingUtils.hasNamedChild(element, \"" + elemName + "\") ? " + enumClass.getName().replace('$', '.')
+            String clazzName = enumClass.getName().replace('$', '.');
+            return "XMLParsingUtils.hasNamedChild(element, \"" + elemName + "\") ? " + clazzName
                 + ".valueOf(XMLParsingUtils.getNodeText(XMLParsingUtils.getNamedChild(element, \"" + elemName + "\"))) : null";
         }
 
@@ -314,10 +315,11 @@ public class JAXBParserGenerator extends Generator {
                 if (listType instanceof Class) {
                     Class<?> typeClass = (Class<?>) listType;
 
+                    String clazzName = typeClass.getName().replace('$', '.');
                     buf.append(
                         "XMLParsingUtils.buildNamedElements(element, \"" + elemName + "\", new XMLNodeFactory<"
-                            + typeClass.getName().replace('$', '.') + ">(){\n")
-                        .append("\t\t").append("public " + typeClass.getName().replace('$', '.') + " build(Element e){\n");
+                            + clazzName + ">(){\n")
+                        .append("\t\t").append("public " + clazzName + " build(Element e){\n");
 
                     for (Class<?> cls : bindings) {
 
