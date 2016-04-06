@@ -31,8 +31,6 @@ import com.peterfranza.gwt.jaxb.client.parser.JAXBBindings;
 
 public class JAXBParserGenerator extends Generator {
 
-    public static boolean ENABLE_VERBOSE = false;
-
     @Override
     public String generate(TreeLogger logger, GeneratorContext context, String typeName) throws UnableToCompleteException {
         try {
@@ -122,7 +120,7 @@ public class JAXBParserGenerator extends Generator {
     private void createFactoryForClass(TreeLogger logger,
             GeneratorContext context, Class<?> cls, final Collection<Class<?>> bindings) throws Exception {
 
-        SourceWriter factorySrc = getFactorySourceWriter(cls, context, logger, getImports(cls));
+        SourceWriter factorySrc = getFactorySourceWriter(cls, context, logger, getImports(logger, cls));
         if (factorySrc != null) {
             String clazzName = cls.getName().replace('$', '.');
             factorySrc.println("public static " + clazzName + " create(Element element) {");
@@ -146,19 +144,21 @@ public class JAXBParserGenerator extends Generator {
                             attrName = attr.name();
                         }
 
-                        debug("marshalling " + f.getName() + " as attribute " + attrName);
+                        logger.log(TreeLogger.DEBUG, "marshalling " + f.getName() + " as attribute " + attrName);
 
                         if (!Modifier.isPrivate(f.getModifiers())) {
-                            factorySrc.println("	_instance." + f.getName() + " = " + getAttributeAccessor(f, attrName) + ";");
+                            factorySrc.println("	_instance." + f.getName() + " = " + getAttributeAccessor(logger, f, attrName)
+                                + ";");
                         }
                         else {
-                            Method m = cls.getMethod(getSetterName(cls, f, attrName, f.getType()), f.getType());
+                            Method m = cls.getMethod(getSetterName(logger, cls, f, attrName, f.getType()), f.getType());
                             if (m != null) {
                                 factorySrc
-                                    .println("	_instance." + m.getName() + "(" + getAttributeAccessor(f, attrName) + ");");
+                                    .println("	_instance." + m.getName() + "(" + getAttributeAccessor(logger, f, attrName)
+                                        + ");");
                             }
                             else {
-                                System.out.println("Inaccessable type " + f.getName() + " " + f.getType() + " "
+                                logger.log(TreeLogger.INFO, "Inaccessable type " + f.getName() + " " + f.getType() + " "
                                     + f.isAccessible());
                             }
                         }
@@ -169,45 +169,46 @@ public class JAXBParserGenerator extends Generator {
                             elemName = elem.name();
                         }
 
-                        debug("marshalling " + f.getName() + " as element " + elemName);
+                        logger.log(TreeLogger.DEBUG, "marshalling " + f.getName() + " as element " + elemName);
 
                         if (!Modifier.isPrivate(f.getModifiers())) {
-                            factorySrc.println("	_instance." + f.getName() + " = " + getElementAccessor(f, elemName, bindings)
+                            factorySrc.println("	_instance." + f.getName() + " = "
+                                + getElementAccessor(logger, f, elemName, bindings)
                                 + ";");
                         }
                         else {
-                            Method m = cls.getMethod(getSetterName(cls, f, elemName, f.getType()), f.getType());
+                            Method m = cls.getMethod(getSetterName(logger, cls, f, elemName, f.getType()), f.getType());
                             if (m != null) {
                                 factorySrc.println("	_instance." + m.getName() + "("
-                                    + getElementAccessor(f, elemName, bindings) + ");");
+                                    + getElementAccessor(logger, f, elemName, bindings) + ");");
                             }
                             else {
-                                System.out.println("Inaccessable type " + f.getName() + " " + f.getType() + " "
+                                logger.log(TreeLogger.INFO, "Inaccessable type " + f.getName() + " " + f.getType() + " "
                                     + f.isAccessible());
                             }
                         }
 
                     }
                     else if (value != null) {
-                        debug("marshalling " + f.getName() + " as value");
+                        logger.log(TreeLogger.DEBUG, "marshalling " + f.getName() + " as value");
 
                         if (!Modifier.isPrivate(f.getModifiers())) {
-                            factorySrc.println("	_instance." + f.getName() + " = " + getValueAccessor(f) + ";");
+                            factorySrc.println("	_instance." + f.getName() + " = " + getValueAccessor(logger, f) + ";");
                         }
                         else {
-                            Method m = cls.getMethod(getSetterName(cls, f, f.getName(), f.getType()), f.getType());
+                            Method m = cls.getMethod(getSetterName(logger, cls, f, f.getName(), f.getType()), f.getType());
                             if (m != null) {
-                                factorySrc.println("	_instance." + m.getName() + "(" + getValueAccessor(f) + ");");
+                                factorySrc.println("	_instance." + m.getName() + "(" + getValueAccessor(logger, f) + ");");
                             }
                             else {
-                                System.out.println("Inaccessable type " + f.getName() + " " + f.getType() + " "
+                                logger.log(TreeLogger.INFO, "Inaccessable type " + f.getName() + " " + f.getType() + " "
                                     + f.isAccessible());
                             }
                         }
                     }
                 }
                 else {
-                    debug(f.getName() + " as transient");
+                    logger.log(TreeLogger.DEBUG, f.getName() + " as transient");
                 }
             }
 
@@ -217,7 +218,7 @@ public class JAXBParserGenerator extends Generator {
         }
     }
 
-    private Collection<String> getImports(Class<?> cls) {
+    private Collection<String> getImports(TreeLogger logger, Class<?> cls) {
         HashSet<String> imports = new HashSet<String>();
         for (Field f : getDeclaredFields(cls)) {
             if (!(f.getAnnotation(XmlTransient.class) != null)) {
@@ -234,7 +235,7 @@ public class JAXBParserGenerator extends Generator {
                     }
 
                     if (Collection.class.isAssignableFrom(f.getType())) {
-                        debug("Import Collection: " + f.getName());
+                        logger.log(TreeLogger.DEBUG, "Import Collection: " + f.getName());
                         if (f.getGenericType() instanceof ParameterizedType) {
                             ParameterizedType pt = (ParameterizedType) f.getGenericType();
                             Type listType = pt.getActualTypeArguments()[0];
@@ -264,7 +265,7 @@ public class JAXBParserGenerator extends Generator {
         return list;
     }
 
-    private static String getElementAccessor(Field f, String elemName, final Collection<Class<?>> bindings) {
+    private static String getElementAccessor(TreeLogger logger, Field f, String elemName, final Collection<Class<?>> bindings) {
 
         if (f.getType().equals(String.class)) {
             return "XMLParsingUtils.getNodeText(XMLParsingUtils.getNamedChild(element, \"" + elemName + "\"))";
@@ -308,7 +309,7 @@ public class JAXBParserGenerator extends Generator {
 
         if (Collection.class.isAssignableFrom(f.getType())) {
             StringBuffer buf = new StringBuffer();
-            debug("Found Collection: " + f.getGenericType());
+            logger.log(TreeLogger.DEBUG, "Found Collection: " + f.getGenericType());
             if (f.getGenericType() instanceof ParameterizedType) {
                 ParameterizedType pt = (ParameterizedType) f.getGenericType();
                 Type listType = pt.getActualTypeArguments()[0];
@@ -402,11 +403,11 @@ public class JAXBParserGenerator extends Generator {
             return buf.toString();
         }
 
-        System.out.println("Unable to bind element type: " + f.getType() + " enum=" + f.getType().isEnum());
+        logger.log(TreeLogger.INFO, "Unable to bind element type: " + f.getType() + " enum=" + f.getType().isEnum());
         throw new RuntimeException("No Accessor Found for " + f.getName());
     }
 
-    private static String getAttributeAccessor(Field f, String attrName) {
+    private static String getAttributeAccessor(TreeLogger logger, Field f, String attrName) {
         if (f.getType().equals(String.class)) {
             return "element.getAttribute(\"" + attrName + "\")";
         }
@@ -437,11 +438,11 @@ public class JAXBParserGenerator extends Generator {
                 + ".valueOf(element.getAttribute(\"" + attrName + "\")) : null";
         }
 
-        System.out.println("Unable to bind attribute type: " + f.getType());
+        logger.log(TreeLogger.INFO, "Unable to bind attribute type: " + f.getType());
         throw new RuntimeException("No Accessor Found for " + f.getName());
     }
 
-    private static String getValueAccessor(Field f) {
+    private static String getValueAccessor(TreeLogger logger, Field f) {
         if (f.getType().equals(String.class)) {
             return "XMLParsingUtils.getNodeText(element)";
         }
@@ -469,36 +470,37 @@ public class JAXBParserGenerator extends Generator {
                 + ".valueOf(XMLParsingUtils.getNodeText(element)) : null";
         }
 
-        System.out.println("Unable to bind attribute type: " + f.getType());
+        logger.log(TreeLogger.INFO, "Unable to bind attribute type: " + f.getType());
         throw new RuntimeException("No Accessor Found for " + f.getName());
     }
 
-    private static String getSetterName(Class<?> cls, Field f, String attribute, Class<?> type) {
+    private static String getSetterName(TreeLogger logger, Class<?> cls, Field f, String attribute, Class<?> type) {
         Method m;
 
         String altName =
             f.getName().toLowerCase().startsWith("is") && (type.equals(boolean.class) || type.equals(Boolean.class))
                 ? f.getName().substring(2) : f.getName();
 
-        if ((m = isMethodExists(cls, "set" + ("" + attribute.charAt(0)).toUpperCase() + attribute.substring(1), type)) != null) {
+        if ((m = isMethodExists(logger, cls, "set" + ("" + attribute.charAt(0)).toUpperCase() + attribute.substring(1), type)) != null) {
             return m.getName();
         }
-        else if ((m = isMethodExists(cls, "set" + ("" + f.getName().charAt(0)).toUpperCase() + f.getName().substring(1), type)) != null) {
+        else if ((m =
+            isMethodExists(logger, cls, "set" + ("" + f.getName().charAt(0)).toUpperCase() + f.getName().substring(1), type)) != null) {
             return m.getName();
         }
-        else if ((m = isMethodExists(cls, "set" + ("" + altName.charAt(0)).toUpperCase() + altName.substring(1), type)) != null) {
+        else if ((m = isMethodExists(logger, cls, "set" + ("" + altName.charAt(0)).toUpperCase() + altName.substring(1), type)) != null) {
             return m.getName();
         }
 
         throw new RuntimeException("No Setter Found for " + f.getName());
     }
 
-    private static Method isMethodExists(Class<?> cls, String name, Class<?> type) {
+    private static Method isMethodExists(TreeLogger logger, Class<?> cls, String name, Class<?> type) {
         try {
             return cls.getMethod(name, type);
         }
         catch (Exception e) {
-            debug(e.getMessage());
+            logger.log(TreeLogger.DEBUG, e.getMessage());
         }
         return null;
     }
@@ -519,10 +521,7 @@ public class JAXBParserGenerator extends Generator {
         if (printWriter == null) {
             return null;
         }
-        else {
-            SourceWriter sw = composer.createSourceWriter(context, printWriter);
-            return sw;
-        }
+        return composer.createSourceWriter(context, printWriter);
     }
 
     public SourceWriter getFactorySourceWriter(Class<?> classType,
@@ -540,23 +539,13 @@ public class JAXBParserGenerator extends Generator {
 
         for (String s : imports) {
             composer.addImport(s);
-            debug("Augmenting Imports: +" + s);
+            logger.log(TreeLogger.DEBUG, "Augmenting Imports: +" + s);
         }
 
         PrintWriter printWriter = context.tryCreate(logger, packageName, simpleName);
         if (printWriter == null) {
             return null;
         }
-        else {
-            SourceWriter sw = composer.createSourceWriter(context, printWriter);
-            return sw;
-        }
+        return composer.createSourceWriter(context, printWriter);
     }
-
-    private static void debug(String s) {
-        if (ENABLE_VERBOSE) {
-            System.out.println(s);
-        }
-    }
-
 }
