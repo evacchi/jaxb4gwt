@@ -28,6 +28,7 @@ import com.google.gwt.core.ext.typeinfo.JField;
 import com.google.gwt.core.ext.typeinfo.JType;
 import com.google.gwt.user.rebind.ClassSourceFileComposerFactory;
 import com.google.gwt.user.rebind.SourceWriter;
+import com.peterfranza.gwt.jaxb.client.parser.JAXBBindings;
 
 public class JAXBParserGenerator extends Generator {
 
@@ -38,6 +39,11 @@ public class JAXBParserGenerator extends Generator {
         try {
             logger.log(TreeLogger.INFO, "Start JAXBParserGenerator for " + typeName);
             JClassType classType = context.getTypeOracle().getType(typeName);
+            List<Class<?>> objects = new ArrayList<Class<?>>();
+            JAXBBindings bindings = classType.getAnnotation(JAXBBindings.class);
+            if (bindings != null)
+                objects.addAll(Arrays.asList(bindings.objects()));
+
             logger.log(TreeLogger.INFO, "Found JClassType " + classType);
             JClassType firstInterfaceClassType = classType.getImplementedInterfaces()[0];
             logger.log(TreeLogger.INFO, "Found JClassType firstImplInterface " + firstInterfaceClassType);
@@ -50,7 +56,6 @@ public class JAXBParserGenerator extends Generator {
             }
 
             Class<?> rootClass = Class.forName(rootClassType.getErasedType().getQualifiedBinaryName());
-            List<Class<?>> objects = new ArrayList<Class<?>>();
             JField[] fields = rootClassType.getFields();
             for (JField jField : fields) {
                 XmlElement annotation = jField.getAnnotation(XmlElement.class);
@@ -73,11 +78,10 @@ public class JAXBParserGenerator extends Generator {
             // Here you would retrieve the metadata based on typeName for this Screen
             SourceWriter src = getSourceWriter(classType, context, logger);
             if (src != null) {
-                System.out.println("Generating for: " + typeName);
-                System.out.println("  -- " + rootClass.getName());
+                logger.log(TreeLogger.INFO, "Generating for: " + typeName);
+                logger.log(TreeLogger.INFO, "  --with type " + rootClass.getName());
 
                 src.println("public JAXBParser<" + rootType + "> create() {");
-                src.println("System.out.println(\"Creating Parser For: " + rootType + "\");");
 
                 String clsName = rootClass.getSimpleName();
                 clsName = ("" + clsName.charAt(0)).toLowerCase() + clsName.substring(1);
